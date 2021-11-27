@@ -18,10 +18,25 @@ from skimage.util import img_as_float
 from skimage import io
 from skimage import img_as_ubyte
 
-form_class = uic.loadUiType("superpixel_annotation.ui")[0]
+_form_location = osp.join(osp.dirname(osp.abspath(__file__)), "superpixel_annotation.ui")
+_form_class = uic.loadUiType(_form_location)[0]
 
-class MyWindow(QMainWindow, form_class):
-    def __init__(self):
+move_pt = None
+press_pt = None
+release_pt = None
+
+class MyWindow(QMainWindow, _form_class):
+    """ Main QT Window for display segmentation options.
+
+    Parameters
+    ----------
+    images: str
+        Optional path to an images folder for preloading images. Default: ``None``
+    labels: str
+        Optional path to a labels folder for preloading labels. Default: ``None``
+    """
+
+    def __init__(self, images=None, labels=None):
         super().__init__()
         self.setupUi(self)
         self.label = Label()
@@ -53,7 +68,7 @@ class MyWindow(QMainWindow, form_class):
         self.radioButton_5.clicked.connect(self.radio_button_clicked)
         self.radioButton_6.clicked.connect(self.radio_button_clicked)
         self.radioButton_6.setChecked(True)
-        
+
         self.horizontalSlider.setMinimum(0)
         self.horizontalSlider.setMaximum(1000)
         self.horizontalSlider.setValue(100)
@@ -180,10 +195,10 @@ class MyWindow(QMainWindow, form_class):
         self.mask_on = 0
 
         self.paths = []
-        self.save_path = None
+        self.save_path = labels
         self.index = 0
         self.index_max = 0
-        
+
         self.method = 5
         self.felzenszwalb_scale = 100
         self.felzenszwalb_sigma = 0.5
@@ -221,6 +236,9 @@ class MyWindow(QMainWindow, form_class):
         self.right_press = -1
         self.candidate = []
         self.delete_candidate = []
+
+        if images is not None:
+            self._load_images(images)
 
     def slider_1_value_changed(self):
         self.felzenszwalb_scale = self.horizontalSlider.value()
@@ -307,7 +325,7 @@ class MyWindow(QMainWindow, form_class):
         self.label_22.setText('thickness : ' + str(self.thickness))
 
     def radio_button_clicked(self):
-       
+
         if self.radioButton.isChecked():
             self.method = 0
             self.line = False
@@ -374,11 +392,11 @@ class MyWindow(QMainWindow, form_class):
                 if self.line == False:
                     cv2.circle(self.mask, (pt[0], pt[1]), self.radius, (self.R, self.G, self.B), -1)
                     self.draw_image()
-            
+
                 else:
                     self.line_start = pt
                     self.temp_mask = copy.copy(self.mask)
-                
+
             self.left_press = 1
 
     def right_press_callback(self):
@@ -406,7 +424,7 @@ class MyWindow(QMainWindow, form_class):
 
         if self.segments is not None:
             if release_pt[1] > 0 and release_pt[1] < h and release_pt[0] > 0 and release_pt[0] < w:
-                
+
                 seg = self.segments[release_pt[1], release_pt[0]]
 
                 if seg not in self.candidate:
@@ -424,7 +442,7 @@ class MyWindow(QMainWindow, form_class):
 
         else:
             if release_pt[1] > 0 and release_pt[1] < h and release_pt[0] > 0 and release_pt[0] < w:
-                
+
                 pt = release_pt
                 self.pre_mask = copy.copy(self.mask)
                 if self.line == False:
@@ -432,7 +450,7 @@ class MyWindow(QMainWindow, form_class):
 
                 else:
                     cv2.line(self.mask, (self.line_start[0], self.line_start[1]), (pt[0], pt[1]), (self.R, self.G, self.B), self.thickness)
-                
+
             self.draw_image()
             self.left_press = 0
 
@@ -459,7 +477,7 @@ class MyWindow(QMainWindow, form_class):
 
         else:
             if release_pt[1] > 0 and release_pt[1] < h and release_pt[0] > 0 and release_pt[0] < w:
-                
+
                 pt = release_pt
                 self.pre_mask = copy.copy(self.mask)
                 cv2.circle(self.mask, (pt[0], pt[1]), self.radius, (0, 0, 0), -1)
@@ -522,7 +540,21 @@ class MyWindow(QMainWindow, form_class):
             cv2.imwrite(osp.join(self.save_path, osp.split(self.paths[self.index])[-1]), save_image)
 
     def open_clicked(self):
+        """ Action to perform on clicking the open button.
+
+        Pop up a file dialog and load the first image into the GUI.
+        """
         path = QFileDialog.getExistingDirectory(self, "Select Directory")
+        self._load_images(path)
+
+    def _load_images(self, path):
+        """ Load the images from the given path and set the first image into the GUI.
+
+        Parameters
+        ----------
+        path: str
+            The path that contains the images to load
+        """
         paths = sorted([osp.join(path, fname)
                         for fname in os.listdir(path)
                         if osp.splitext(fname)[-1].lower() in (".png", ".jpg")])
@@ -535,6 +567,7 @@ class MyWindow(QMainWindow, form_class):
             self.label_3.setText(osp.split(self.paths[self.index])[-1])
             self.update_image()
             self.draw_image()
+
 
     def next_clicked(self):
         if self.image is not None:
@@ -605,7 +638,7 @@ class MyWindow(QMainWindow, form_class):
             self.mask = copy.copy(self.redo_mask)
             self.draw_image()
             self.undo = 0
-            
+
     def undo_clicked(self):
         self.undo = 1
         self.redo_mask = copy.copy(self.mask)
@@ -628,34 +661,34 @@ class MyWindow(QMainWindow, form_class):
 
     def draw_image(self):
         im_weight = 0.6
-        
+
         float_image = img_as_float(self.image)
 
         # copy the image where no mask is drawn for better display
         mask = self.mask.copy()
         mask = np.where(mask.any(axis=-1, keepdims=True), mask, self.image)
-        
+
         if self.method == 0:
             if self.just_mask == 0:
                 self.segments = felzenszwalb(float_image, scale=self.felzenszwalb_scale, sigma=self.felzenszwalb_sigma, min_size=self.felzenszwalb_min_size)
-        
+
         elif self.method == 1:
             if self.just_mask == 0:
                 self.segments = slic(float_image, n_segments=self.slic_n_segments, compactness=self.slic_compactness, sigma=self.slic_sigma)
-        
+
         elif self.method == 2:
             if self.just_mask == 0:
                 self.segments = quickshift(float_image, kernel_size=self.quickshift_kernel_size, max_dist=self.quickshift_max_dist, ratio=self.quickshift_ratio)
-        
+
         elif self.method == 3:
             if self.just_mask == 0:
                 gradient = sobel(rgb2gray(float_image))
                 self.segments = watershed(gradient, markers=self.watershed_markers, compactness=self.watershed_compactness)
-        
+
         elif self.method == 4:
             self.segments = None
             self.line = False
-        
+
         else:
             self.segments = None
             self.line = True
@@ -680,9 +713,9 @@ class MyWindow(QMainWindow, form_class):
             else:
                 result = mask
 
-        
+
         height, width, channels = np.shape(result)
-      
+
         totalBytes = result.nbytes
         bytesPerLine = int(totalBytes / height)
         qimg = QtGui.QImage(result.data, result.shape[1], result.shape[0], bytesPerLine, QtGui.QImage.Format_RGB888)
@@ -702,13 +735,13 @@ class MyWindow(QMainWindow, form_class):
             if label is not None:
                 label = cv2.cvtColor(label, cv2.COLOR_BGR2RGB)
                 self.mask = label
-                self.pre_mask = copy.copy(self.mask) 
+                self.pre_mask = copy.copy(self.mask)
             else:
                 self.mask = np.zeros_like(self.image)
-                self.pre_mask = copy.copy(self.mask)        
+                self.pre_mask = copy.copy(self.mask)
         else:
             self.mask = np.zeros_like(self.image)
-            self.pre_mask = copy.copy(self.mask) 
+            self.pre_mask = copy.copy(self.mask)
 
 class Label(QtWidgets.QLabel):
     move_signal = pyqtSignal()
@@ -722,7 +755,7 @@ class Label(QtWidgets.QLabel):
 
         move_pt = event.x(), event.y()
         self.move_signal.emit()
-   
+
     def mousePressEvent(self, event):
         global press_pt
 
@@ -745,12 +778,13 @@ class Label(QtWidgets.QLabel):
         elif event.button() == Qt.RightButton:
             self.right_release_signal.emit()
 
-if __name__ == "__main__":
-    move_pt = None
-    press_pt = None
-    release_pt = None
 
+def launch(images=None, labels=None):
     app = QApplication(sys.argv)
-    myWindow = MyWindow()
+    myWindow = MyWindow(images, labels)
     myWindow.show()
     app.exec_()
+
+
+if __name__ == "__main__":
+    launch()
