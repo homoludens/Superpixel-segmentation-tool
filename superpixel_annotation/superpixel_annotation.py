@@ -1,13 +1,14 @@
+import os
+from os import path as osp
 import sys
 from PyQt5.QtWidgets import *
 from PyQt5 import uic
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QIcon, QImage, QPainter, QPalette, QPixmap
-sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages')
+
 import cv2
 import numpy as np
-import glob
 import copy
 from skimage.color import rgb2gray
 from skimage.filters import sobel
@@ -518,19 +519,20 @@ class MyWindow(QMainWindow, form_class):
             if self.save_path is None:
                 self.save_path = QFileDialog.getExistingDirectory(self, "Select Label Directory")
             save_image = cv2.cvtColor(self.mask, cv2.COLOR_BGR2RGB)
-            cv2.imwrite(self.save_path + '/' + self.paths[self.index].split('/')[-1], save_image)
+            cv2.imwrite(osp.join(self.save_path, osp.split(self.paths[self.index])[-1]), save_image)
 
     def open_clicked(self):
         path = QFileDialog.getExistingDirectory(self, "Select Directory")
-        paths = glob.glob(path + '/*.jpg') + glob.glob(path + '/*.png')
-        paths.sort()
+        paths = sorted([osp.join(path, fname)
+                        for fname in os.listdir(path)
+                        if osp.splitext(fname)[-1].lower() in (".png", ".jpg")])
 
         if len(paths) > 0:
             self.paths = paths
             self.index = 0
             self.index_max = len(paths)
             self.spinBox.setRange(0, self.index_max - 1)
-            self.label_3.setText(self.paths[self.index].split('/')[-1])
+            self.label_3.setText(osp.split(self.paths[self.index])[-1])
             self.update_image()
             self.draw_image()
 
@@ -539,14 +541,14 @@ class MyWindow(QMainWindow, form_class):
             self.index += 1
             if self.index == self.index_max:
                 self.index = 0
-            self.label_3.setText(self.paths[self.index].split('/')[-1])
+            self.label_3.setText(osp.split(self.paths[self.index])[-1])
             self.update_image()
             self.draw_image()
 
     def previous_clicked(self):
         if self.image is not None:
             self.index -= 1
-            self.label_3.setText(self.paths[self.index].split('/')[-1])
+            self.label_3.setText(osp.split(self.paths[self.index])[-1])
             self.update_image()
             self.draw_image()
 
@@ -625,8 +627,14 @@ class MyWindow(QMainWindow, form_class):
         self.B = self.spinBox_4.value()
 
     def draw_image(self):
+        im_weight = 0.6
+        
         float_image = img_as_float(self.image)
 
+        # copy the image where no mask is drawn for better display
+        mask = self.mask.copy()
+        mask = np.where(mask.any(axis=-1, keepdims=True), mask, self.image)
+        
         if self.method == 0:
             if self.just_mask == 0:
                 self.segments = felzenszwalb(float_image, scale=self.felzenszwalb_scale, sigma=self.felzenszwalb_sigma, min_size=self.felzenszwalb_min_size)
@@ -658,19 +666,20 @@ class MyWindow(QMainWindow, form_class):
 
             if self.hide == 0:
                 if self.mask_on == 0:
-                    result = cv2.addWeighted(cv_image, 0.5, self.mask, 0.5, 0)
+                    result = cv2.addWeighted(cv_image, im_weight, mask, 1.0 - im_weight, 0)
                 else:
-                    result = self.mask
+                    result = mask
             else:
                 if self.mask_on == 0:
-                    result = cv2.addWeighted(self.image, 0.5, self.mask, 0.5, 0)
+                    result = cv2.addWeighted(self.image, im_weight, mask, 1.0 - im_weight, 0)
                 else:
-                    result = self.mask
+                    result = mask
         else:
             if self.mask_on == 0:
-                result = cv2.addWeighted(self.image, 0.5, self.mask, 0.5, 0)
+                result = cv2.addWeighted(self.image, im_weight, mask, 1.0 - im_weight, 0)
             else:
-                result = self.mask
+                result = mask
+
         
         height, width, channels = np.shape(result)
       
@@ -689,7 +698,7 @@ class MyWindow(QMainWindow, form_class):
         self.spinBox.setValue(self.index)
         self.image = io.imread(self.paths[self.index])
         if self.save_path is not None:
-            label = cv2.imread(self.save_path + '/' + self.paths[self.index].split('/')[-1])
+            label = cv2.imread(osp.join(self.save_path, osp.split(self.paths[self.index])[-1]))
             if label is not None:
                 label = cv2.cvtColor(label, cv2.COLOR_BGR2RGB)
                 self.mask = label
