@@ -660,7 +660,7 @@ class MyWindow(QMainWindow, _form_class):
         self.B = self.spinBox_4.value()
 
     def draw_image(self):
-        im_weight = 0.6
+        im_weight = 0.75
 
         float_image = img_as_float(self.image)
 
@@ -696,6 +696,7 @@ class MyWindow(QMainWindow, _form_class):
         if self.segments is not None:
             boundaries = mark_boundaries(self.image, self.segments)
             cv_image = img_as_ubyte(boundaries)
+            cv_image = cv2.addWeighted(self.image, im_weight, cv_image, 1.0 - im_weight, 0)
 
             if self.hide == 0:
                 if self.mask_on == 0:
