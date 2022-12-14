@@ -61,6 +61,9 @@ class MyWindow(QMainWindow, _form_class):
         self.pushButton_13.clicked.connect(self.redo_clicked)
         self.pushButton_14.clicked.connect(self.undo_clicked)
 
+        self.pushButton_zoomin.clicked.connect(self.on_zoom_in)
+        self.pushButton_zoomout.clicked.connect(self.on_zoom_out)
+
         self.radioButton.clicked.connect(self.radio_button_clicked)
         self.radioButton_2.clicked.connect(self.radio_button_clicked)
         self.radioButton_3.clicked.connect(self.radio_button_clicked)
@@ -719,10 +722,14 @@ class MyWindow(QMainWindow, _form_class):
 
         totalBytes = result.nbytes
         bytesPerLine = int(totalBytes / height)
+
         qimg = QtGui.QImage(result.data, result.shape[1], result.shape[0], bytesPerLine, QtGui.QImage.Format_RGB888)
-        pixmap = QtGui.QPixmap.fromImage(qimg)
+
+        self.pixmap = QtGui.QPixmap.fromImage(qimg)
+        self.height = self.pixmap.height()
+
         self.label.resize(width, height)
-        self.label.setPixmap(pixmap)
+        self.label.setPixmap(self.pixmap)
         self.label.show()
 
         self.candidate = []
@@ -743,6 +750,19 @@ class MyWindow(QMainWindow, _form_class):
         else:
             self.mask = np.zeros_like(self.image)
             self.pre_mask = copy.copy(self.mask)
+
+    def on_zoom_in(self, event):
+        self.height += 100
+        self.resize_image()
+
+    def on_zoom_out(self, event):
+        self.height -= 100
+        self.resize_image()
+
+    def resize_image(self):
+        self.pixmap = self.pixmap.scaledToHeight(self.height)
+        self.label.setPixmap(self.pixmap)
+        self.label.show()
 
 class Label(QtWidgets.QLabel):
     move_signal = pyqtSignal()
